@@ -50,14 +50,22 @@ jobs:
       - name: Futures paper cycle
         run: python scripts/paper_futures_once.py --lev 3 --max-new 1
 
-      - name: Rebuild dashboard
-        run: python scripts/build_dashboard.py --out dashboard.html
+      - name: Rebuild dashboard (twice daily only)
+        run: |
+          H=$(date -u +%H)
+          if [ "$H" = "00" ] || [ "$H" = "12" ]; then
+            python scripts/build_dashboard.py --out dashboard.html
+            echo "publish=true" >> $GITHUB_ENV
+          else
+            echo "publish=false" >> $GITHUB_ENV
+          fi
 
-      - name: Commit state + dashboard
+      - name: Commit state (+ dashboard when due)
         run: |
           git config user.name "paper-bot"
           git config user.email "paper-bot@users.noreply.github.com"
-          git add -f data/forward.db data/futures_paper.db data/paper.db dashboard.html
+          git add -f data/forward.db data/futures_paper.db data/paper.db
+          if [ "$publish" = "true" ]; then git add -f dashboard.html; fi
           git diff --cached --quiet && echo "no changes, skipping commit" && exit 0
           git commit -m "paper cycle $(date -u +%Y-%m-%dT%H:%MZ)"
           git push

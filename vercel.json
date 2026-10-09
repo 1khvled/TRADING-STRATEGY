@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "git diff HEAD^ HEAD --quiet -- dashboard.html vercel.json",
   "rewrites": [{ "source": "/", "destination": "/dashboard.html" }],
   "headers": [
     {
