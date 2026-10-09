@@ -1,0 +1,63 @@
+# Paper-trading loop + dashboard refresh, every 4H bar close.
+#
+# Why this exists: Vercel/Railway-style hosts can't run the persistent
+# run_live.py loop or keep SQLite files, so the schedule lives HERE:
+#   1. run the spot + futures paper cycles (manage exits, open new setups)
+#   2. rebuild dashboard.html from the updated DBs
+#   3. commit data/*.db + dashboard.html back to the repo
+# Pushing dashboard.html triggers an automatic Vercel redeploy.
+#
+# No secrets needed: paper mode uses Binance PUBLIC market data only.
+# BINANCE_BASE_URL points at the global market-data mirror because
+# GitHub runners (US/EU cloud IPs) can get 451-restricted on api.binance.com.
+# Futures klines fall back to spot klines automatically if fapi is blocked.
+
+name: paper-4h
+
+on:
+  schedule:
+    # 7 minutes past each 4H close (00/04/08/12/16/20 UTC) so bars have settled
+    - cron: "7 0,4,8,12,16,20 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: paper-4h
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  cycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      BINANCE_BASE_URL: https://data-api.binance.vision
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Spot paper cycle
+        run: python scripts/forward_once.py --max-new 2
+
+      - name: Futures paper cycle
+        run: python scripts/paper_futures_once.py --lev 3 --max-new 1
+
+      - name: Rebuild dashboard
+        run: python scripts/build_dashboard.py --out dashboard.html
+
+      - name: Commit state + dashboard
+        run: |
+          git config user.name "paper-bot"
+          git config user.email "paper-bot@users.noreply.github.com"
+          git add -f data/forward.db data/futures_paper.db data/paper.db dashboard.html
+          git diff --cached --quiet && echo "no changes, skipping commit" && exit 0
+          git commit -m "paper cycle $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push

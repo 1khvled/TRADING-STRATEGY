@@ -1,4 +1,12 @@
+# Secrets — NEVER commit real keys (.env.example is the safe template)
 .env
-data/
+
+# Paper-trade state IS committed on purpose: data/*.db is how the
+# scheduled GitHub Action carries positions/equity from run to run.
+# Everything else under data/ (backtest dumps, logs) stays local.
+data/*.csv
+data/*.json
+data/*.log
+
 __pycache__/
 *.pyc
