@@ -19,7 +19,12 @@ BOOKS = [
     ("spot", "data/paper.db", "Spot paper", "spot"),
     ("fut", "data/futures_paper.db", "Futures 3x", "fut"),
 ]
-START_EQ = 10000.0
+START_EQ = None  # resolved from src.config at build time (single source of truth)
+try:
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from src.config import PAPER_START_EQUITY as START_EQ
+except Exception:
+    START_EQ = 1000.0
 
 
 def qdb(path):
@@ -387,7 +392,7 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(
 <div class="view on" id="v-overview">
   <div class="hero">
     <div>
-      <div class="hero-label">Tracked capital · separate $10k accounts</div>
+      <div class="hero-label" id="hero-label">Live paper</div>
       <div class="hero-val" id="hero-eq">—</div>
       <div class="hero-sub" id="hero-sub">—</div>
       <div class="note" style="margin-top:8px">equity = cash + mark-to-market at live price</div>
@@ -396,7 +401,7 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(
   </div>
   <section>
     <div class="sec-head"><h2>Per-book stats</h2>
-      <span class="sec-note">each book = own $10k account · equity = cash + MTM</span></div>
+      <span class="sec-note">forward + futures are the live books · equity = cash + MTM</span></div>
     <div class="panel tbl-scroll" id="perbook"></div>
   </section>
   <section>
@@ -560,8 +565,9 @@ function allClosed(){
 /* ---------- nav ---------- */
 const NAV=[["v-overview","Overview",null],["v-forward","Forward",null],["v-backtest","Backtest",null],["v-montecarlo","Monte Carlo",null]];
 function renderNav(){
-  const nOpen = Object.values(SNAP.books).reduce((s,b)=>s+b.open.length,0);
-  const nCl = Object.values(SNAP.books).reduce((s,b)=>s+b.closed.length,0);
+  const live = Object.entries(SNAP.books).filter(([k])=>k!=="spot").map(([,b])=>b);
+  const nOpen = live.reduce((s,b)=>s+b.open.length,0);
+  const nCl = live.reduce((s,b)=>s+b.closed.length,0);
   const counts={"v-overview":nOpen,"v-forward":nCl,"v-backtest":SNAP.spot.n,"v-montecarlo":(SNAP.mc?1:0)+(SNAP.mc_fut?1:0)};
   $("nav").innerHTML = NAV.map(([id,label])=>
     `<button class="tab" data-v="${id}">${label}<b>${counts[id]}</b></button>`).join("");
@@ -576,7 +582,7 @@ function renderNav(){
 }
 
 function renderBooks(){
-  const rows=Object.entries(SNAP.books).map(([k,b])=>{
+  const rows=Object.entries(SNAP.books).filter(([k])=>k!=="spot").map(([k,b])=>{
     const e=bookEq(b), cl=b.closed;
     const w=cl.filter(c=>c.pnl>0).length;
     const gw=cl.filter(c=>c.pnl>0).reduce((s,c)=>s+c.pnl,0);
@@ -605,33 +611,43 @@ function renderBooks(){
     `<tbody>${rows}</tbody></table>`;
 }
 
-/* ---------- overview ---------- */
+/* ---------- overview: forward book is the headline, no cross-book sums ---------- */
+function liveBooks(){
+  return Object.entries(SNAP.books).filter(([k])=>k!=="spot");
+}
 function renderHero(){
-  let tot=0, nO=0, nC=0, un=0, re=0, risk=0;
-  const cells=[];
-  for(const [k,b] of Object.entries(SNAP.books)){
-    const e=bookEq(b); tot+=e.eq;
-    nO+=b.open.length; nC+=b.closed.length; un+=e.un; re+=e.real;
-    for(const p of b.open){ const cur=live.px[p.symbol];
-      risk += Math.max(0,((cur||p.entry)-p.stop))*p.qty; }
-    cells.push(`<div class="hcell"><label>${esc(b.label)}</label><b>$${fm(e.eq)}</b><i>${b.open.length} open · ${retStr(e.eq)}</i></div>`);
-  }
-  $("hero-eq").textContent = "$" + fm(tot);
+  const fwd = SNAP.books.fwd, fut = SNAP.books.fut;
+  const e = bookEq(fwd), ef = fut ? bookEq(fut) : null;
+  const ret = (e.eq/START-1)*100;
+  $("hero-label").textContent = "Live paper · Forward · $"+fm(START)+" start";
+  $("hero-eq").textContent = "$" + fm(e.eq);
+  $("hero-eq").className = "hero-val " + (ret>=0?"pos":"neg");
+  let risk=0;
+  for(const p of fwd.open){ const cur=live.px[p.symbol];
+    risk += Math.max(0,((cur||p.entry)-p.stop))*p.qty; }
   $("hero-sub").innerHTML =
-    `<b>${nO}</b> open · <b>${nC}</b> closed · unrealized <b class="${un>=0?"pos":"neg"}">$${fm(un)}</b> · `+
-    `realized <b class="${re>=0?"pos":"neg"}">$${fm(re)}</b> · risk at stop <b>$${fm(risk)}</b>`;
-  $("hero-books").innerHTML = cells.join("");
+    `<b class="${ret>=0?"pos":"neg"}">${pc(ret)}</b> since start · <b>${fwd.open.length}</b> open · `+
+    `unrealized <b class="${e.un>=0?"pos":"neg"}">$${fm(e.un)}</b> · `+
+    `realized <b class="${e.real>=0?"pos":"neg"}">$${fm(e.real)}</b> · `+
+    `risk at stop <b>$${fm(risk)} (${e.eq?(100*risk/e.eq).toFixed(1):"0"}%)</b>`+
+    (ef ? `<br><span class="muted">futures 3x book: <b>$${fm(ef.eq)}</b> (${pc((ef.eq/START-1)*100)}) · ${fut.open.length} open</span>` : "");
+  $("hero-books").innerHTML =
+    `<div class="hcell"><label>cash</label><b>$${fm(fwd.cash)}</b><i>forward</i></div>`+
+    `<div class="hcell"><label>closed</label><b>${fwd.closed.length}</b><i>realized $${fm(e.real)}</i></div>`+
+    `<div class="hcell"><label>win rate</label><b>${fwd.closed.length?Math.round(100*fwd.closed.filter(c=>c.pnl>0).length/fwd.closed.length)+"%":"—"}</b><i>forward</i></div>`+
+    `<div class="hcell"><label>deployed</label><b>${e.eq?Math.round(100*(e.eq-fwd.cash)/e.eq):0}%</b><i>of equity</i></div>`;
 }
 
 function retStr(eq){ const v=(eq/START-1)*100; return (v>=0?"+":"")+v.toFixed(1)+"%"; }
 function renderPositions(){
   const wrap=$("positions"); let h="";
-  for(const [k,b] of Object.entries(SNAP.books)){
-    for(const p of b.open) h+=posCard(k,b,p);
+  for(const [k,b] of liveBooks()){
+    const e=bookEq(b);
+    for(const p of b.open) h+=posCard(k,b,p,e.eq);
   }
   wrap.innerHTML = h || `<div class="empty">Flat — no open positions.</div>`;
 }
-function posCard(bk,b,p){
+function posCard(bk,b,p,eq){
   const cur=live.px[p.symbol];
   const u = cur ? (cur/p.entry-1)*100 : 0;
   const up = cur ? (cur-p.entry)*p.qty : 0;
@@ -659,7 +675,7 @@ function posCard(bk,b,p){
     </div>
     <div class="pos-meta" style="display:flex;gap:11px;flex-wrap:wrap;margin-top:9px;padding-top:8px;border-top:1px solid var(--line);font-size:11px;color:var(--dim)">
       <span class="kv">uP&L <b class="${cls}">${up>=0?"+":""}$${fm(up)}</b></span>
-      <span class="kv">risk <b>$${fm(p.risk)}</b></span>
+      <span class="kv">risk <b>$${fm(p.risk)} (${eq?(100*p.risk/eq).toFixed(1):"0"}%)</b></span>
       ${p.liq?`<span class="kv">liq <b>${fmg(p.liq)}</b></span>`:""}
       <span class="kv">score <b>${p.score}</b></span>
     </div></div>`;

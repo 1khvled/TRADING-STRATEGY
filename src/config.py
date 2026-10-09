@@ -27,7 +27,7 @@ BINANCE_API_SECRET = os.environ.get("BINANCE_API_SECRET", "")
 BINANCE_BASE_URL = os.environ.get("BINANCE_BASE_URL", "https://api.binance.com").rstrip("/")
 BINANCE_FUTURES_URL = os.environ.get("BINANCE_FUTURES_URL", "https://fapi.binance.com").rstrip("/")
 
-PAPER_START_EQUITY = _get("PAPER_START_EQUITY", 10000.0, float)
+PAPER_START_EQUITY = _get("PAPER_START_EQUITY", 1000.0, float)
 PAPER_DB = _get("PAPER_DB", "data/paper.db", str)
 RISK_PER_TRADE = _get("RISK_PER_TRADE", 0.01, float)
 MAX_POSITIONS = _get("MAX_POSITIONS", 5, int)

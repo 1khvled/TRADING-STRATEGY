@@ -3,10 +3,12 @@
 
 # Paper-trade state IS committed on purpose: data/*.db is how the
 # scheduled GitHub Action carries positions/equity from run to run.
-# Everything else under data/ (backtest dumps, logs) stays local.
+# Everything else under data/ (backtest dumps, logs, local archives)
+# stays local.
 data/*.csv
 data/*.json
 data/*.log
+data/archive*/
 
 __pycache__/
 *.pyc
