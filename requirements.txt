@@ -1,0 +1,7 @@
+# Alt Swing — mid/low-tier Binance USDT spot swing system (paper first)
+# Python 3.10+ | deps: requests pandas numpy
+
+requests>=2.31
+pandas>=2.0
+numpy>=1.24
+python-dotenv>=1.0
