@@ -127,6 +127,8 @@ def snap_book(db):
         if p.get("status") == "OPEN":
             base["liq"] = f(p.get("liq_price")) if p.get("liq_price") else None
             base["lev"] = p.get("leverage")
+            base["margin"] = f(p.get("margin"))
+            base["fund"] = f(p.get("fund_acc"))
             opens.append(base)
         elif p.get("status") == "CLOSED":
             rk = risk_of(p)
@@ -173,7 +175,7 @@ def snap_backtest(path):
         "file": os.path.basename(path) if path else None,
         "n": len(trades), "win": (wins / len(trades)) if trades else 0.0,
         "pf": (gw / gl) if gl > 0 else 0.0,
-        "expR": (sum(R) / len(R)) if R else 0.0,
+        "exp": (sum(R) / len(R)) if R else 0.0,
         "gross_win": gw, "gross_loss": gl,
         "rows": [{"s": r.get("symbol"), "ret": round(f(r.get("return_pct")), 2),
                   "n": int(r.get("n_trades", 0)), "win": round(f(r.get("win_rate")) * 100),
@@ -257,20 +259,25 @@ TEMPLATE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0d1117">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='5' fill='%233ddc84'/%3E%3C/svg%3E">
 <title>Alt Swing — paper dashboard</title>
 <style>
 :root{
-  --bg:#0a0e15; --panel:#101623; --panel2:#151c2b; --line:#212a3d;
-  --txt:#e9eef8; --dim:#8d99ae; --faint:#525c72;
-  --green:#34d399; --red:#f87171; --teal:#2dd4bf; --violet:#a78bfa; --amber:#fbbf24;
+  color-scheme:dark;
+  --bg:#0d1117; --panel:#131a26; --panel2:#161e2d; --line:#242f45;
+  --txt:#e8edf7; --dim:#8f99ac; --faint:#5a6376;
+  --green:#3ddc84; --red:#f2555a; --teal:#2dd4bf; --amber:#e8b33f;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --r:10px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;background:var(--bg);
+body{font-family:var(--sans);background:var(--bg);
   color:var(--txt);min-height:100vh;padding:26px 22px 70px;font-size:14px;line-height:1.5;
-  -webkit-font-smoothing:antialiased}
+  -webkit-font-smoothing:antialiased;touch-action:manipulation}
 body::before{content:"";position:fixed;inset:0;pointer-events:none;
-  background:radial-gradient(900px 420px at 12% -10%,rgba(45,212,191,.07),transparent),
-             radial-gradient(760px 420px at 92% 4%,rgba(167,139,250,.07),transparent)}
+  background:radial-gradient(1000px 460px at 50% -12%,rgba(61,220,132,.05),transparent)}
 .wrap{max-width:1140px;margin:0 auto;position:relative}
 header.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px}
 .brand{display:flex;align-items:center;gap:10px}
@@ -290,54 +297,53 @@ nav.tabs{position:sticky;top:0;z-index:20;display:flex;gap:6px;margin-bottom:20p
 .tab.on b{background:rgba(45,212,191,.15);color:var(--teal)}
 .view{display:none}.view.on{display:block}
 .hero{background:linear-gradient(160deg,var(--panel2),var(--panel));border:1px solid var(--line);
-  border-radius:18px;padding:22px 24px;margin-bottom:20px;display:grid;
-  grid-template-columns:minmax(230px,.85fr) 1.15fr;gap:22px}
-@media(max-width:860px){.hero{grid-template-columns:1fr}}
-.hero-label{font-size:10.5px;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);margin-bottom:5px}
-.hero-val{font-size:36px;font-weight:650;letter-spacing:-.6px;font-variant-numeric:tabular-nums;line-height:1.1}
+  border-radius:var(--r);padding:22px 24px;margin-bottom:20px}
+.note b{color:var(--txt);font-weight:600}
+.note.eng-ok b{color:var(--green)}
+.note.eng-warn b{color:var(--amber)}
+.note.eng-bad b{color:var(--red)}
+.hero-label{font-size:12px;color:var(--dim);margin-bottom:5px}
+.hero-val{font-size:36px;font-weight:650;letter-spacing:-.6px;font-family:var(--mono);font-variant-numeric:tabular-nums;line-height:1.1}
 .hero-sub{font-size:12px;color:var(--dim);margin-top:7px}
 .hero-sub b{color:var(--txt);font-weight:600}
-.hgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(115px,1fr));gap:1px;background:var(--line);
-  border:1px solid var(--line);border-radius:14px;overflow:hidden}
-.hcell{background:var(--panel);padding:11px 12px}
-.hcell label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:1.1px;color:var(--dim);margin-bottom:3px}
-.hcell b{font-size:16px;font-weight:650;font-variant-numeric:tabular-nums}
-.hcell i{display:block;font-style:normal;font-size:10.5px;color:var(--faint);margin-top:1px}
 section{margin-bottom:24px}
 .sec-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;gap:10px;flex-wrap:wrap}
-h2{font-size:11px;text-transform:uppercase;letter-spacing:1.4px;color:var(--dim);font-weight:600}
+h2{font-size:12.5px;color:var(--dim);font-weight:600}
 .sec-note{font-size:11.5px;color:var(--faint)}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:17px 19px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:17px 19px}
 .bookline{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
 .stat-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:1px;background:var(--line);
-  border:1px solid var(--line);border-radius:13px;overflow:hidden;margin-bottom:13px}
+  border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:13px}
 .stat{background:var(--panel);padding:11px 12px}
-.stat label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:1.1px;color:var(--dim);margin-bottom:3px}
-.stat b{font-size:15.5px;font-weight:650;font-variant-numeric:tabular-nums}
+.stat label{display:block;font-size:11px;color:var(--dim);margin-bottom:3px}
+.stat b{font-size:15.5px;font-weight:650;font-family:var(--mono);font-variant-numeric:tabular-nums}
 .stat i{display:block;font-style:normal;font-size:10.5px;color:var(--faint);margin-top:1px}
-.pos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(295px,1fr));gap:12px}
-.pos-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;position:relative}
+.pos-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+.pos-card{background:var(--panel);border:1px solid var(--line);border-left:2px solid var(--faint);border-radius:var(--r);padding:14px 16px 14px 14px;position:relative}
+.pos-card.pos{border-left-color:var(--green)}
+.pos-card.neg{border-left-color:var(--red)}
 .pos-card.stale{opacity:.75}
 .pos-top{display:flex;align-items:center;gap:7px;margin-bottom:7px;flex-wrap:wrap}
 .pos-sym{font-weight:650;font-size:14.5px;letter-spacing:.2px}
-.pos-px{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;margin-bottom:9px}
+.pos-px{font-size:22px;font-weight:600;font-family:var(--mono);font-variant-numeric:tabular-nums;margin-bottom:9px}
 .pos-px .pct{font-size:12.5px;font-weight:600;margin-left:7px;opacity:.8}
 .kv-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px 14px;font-size:12px}
 .pos-meta{display:flex;gap:11px;flex-wrap:wrap;margin-top:9px;padding-top:8px;border-top:1px solid var(--line);font-size:11px;color:var(--dim)}
-.track{position:relative;height:4px;border-radius:3px;background:rgba(255,255,255,.07);margin:0 0 11px}
-.track-fill{position:absolute;left:0;top:0;height:100%;border-radius:3px;background:var(--green);opacity:.85}
+.track{position:relative;height:3px;border-radius:2px;background:rgba(255,255,255,.08);margin:2px 0 12px}
+.track-fill{position:absolute;left:0;top:0;height:100%;border-radius:2px;background:var(--green)}
 .track-fill.neg{background:var(--red)}
-.track-mark{position:absolute;top:-3px;width:1px;height:10px;background:rgba(255,255,255,.4)}
-.chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;padding:3px 8px;border-radius:7px;
-  background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+.track-mark{position:absolute;top:-2.5px;width:2px;height:8px;background:var(--red);opacity:.8;border-radius:1px}
+.track-end{position:absolute;top:-2.5px;width:2px;height:8px;background:var(--green);opacity:.8;border-radius:1px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;padding:3px 8px;border-radius:6px;
+  background:transparent;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
 .chip b{color:var(--txt);font-weight:600}
-.chip-spot{border-color:rgba(45,212,191,.3);color:var(--teal);background:rgba(45,212,191,.06)}
-.chip-fut{border-color:rgba(167,139,250,.3);color:var(--violet);background:rgba(167,139,250,.07)}
-.kv{color:var(--dim)} .kv b{color:var(--txt);font-weight:600;font-variant-numeric:tabular-nums}
+.chip-spot{color:var(--green);border-color:rgba(61,220,132,.35);background:transparent}
+.chip-fut{color:var(--txt);border-color:var(--line);background:transparent}
+.kv{color:var(--dim)} .kv b{color:var(--txt);font-weight:600;font-family:var(--mono);font-variant-numeric:tabular-nums}
 .kv i{font-style:normal;font-size:11px}
 .empty{color:var(--faint);font-size:12.5px;padding:8px 2px}
 table{width:100%;border-collapse:collapse;font-size:12.5px}
-th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:1px;color:var(--dim);font-weight:600;
+th{text-align:left;font-size:11.5px;color:var(--dim);font-weight:600;
   padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
 td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.03);font-variant-numeric:tabular-nums}
 tr:last-child td{border-bottom:none}
@@ -354,11 +360,11 @@ canvas{width:100%;height:190px;display:block;background:#0c1119;border-radius:10
 .rb span{display:block;font-size:9.5px;color:var(--dim);margin-top:4px;white-space:nowrap}
 .rb b{font-size:11px;color:var(--txt)}
 .mc-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:12px}
-.mc-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+.mc-card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
 .mc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:11px;font-size:13px;font-weight:600;gap:8px;flex-wrap:wrap}
 .mc-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px 16px}
-.mc-grid label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:1.1px;color:var(--dim)}
-.mc-grid b{font-size:15.5px;font-weight:650;font-variant-numeric:tabular-nums}
+.mc-grid label{display:block;font-size:11px;color:var(--dim)}
+.mc-grid b{font-size:15.5px;font-weight:650;font-family:var(--mono);font-variant-numeric:tabular-nums}
 .mc-grid i{display:block;font-style:normal;font-size:10.5px;color:var(--faint)}
 details{border-top:1px solid var(--line);margin-top:13px;padding-top:9px;font-size:12.5px;color:var(--dim)}
 details summary{cursor:pointer;font-size:11.5px;color:var(--dim);list-style:none}
@@ -373,16 +379,23 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(
   border:1px solid rgba(45,212,191,.35);background:rgba(45,212,191,.07)}
 .btn:hover{background:rgba(45,212,191,.14)}
 .expect{display:flex;gap:18px;flex-wrap:wrap;font-size:12.5px;margin-bottom:12px;
-  padding:10px 12px;background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:11px}
+  padding:10px 12px;background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:var(--r)}
+button:focus-visible,.tab:focus-visible,summary:focus-visible,.btn:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.skip{position:absolute;left:-9999px;top:0;background:var(--panel);color:var(--txt);padding:8px 14px;border-radius:8px;z-index:99}
+.skip:focus{position:fixed;left:12px;top:12px}
+.pill.tick{animation:tickpulse .9s ease-out}
+@keyframes tickpulse{0%{background:rgba(61,220,132,.22)}100%{background:transparent}}
+@media (prefers-reduced-motion:reduce){.pill.tick{animation:none}*{scroll-behavior:auto}}
 </style>
 </head>
 <body>
 <div class="wrap">
+<a class="skip" href="#nav">Skip to sections</a>
 <header class="top">
   <div class="brand"><span class="dot"></span><h1>Alt Swing</h1></div>
   <div class="head-meta">
     <span class="pill">paper only</span>
-    <span class="pill" id="live-pill">prices: connecting…</span>
+    <span class="pill" id="live-pill" role="status" aria-live="polite">prices: connecting…</span>
     <span>snapshot __BUILT__</span>
   </div>
 </header>
@@ -396,8 +409,8 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(
       <div class="hero-val" id="hero-eq">—</div>
       <div class="hero-sub" id="hero-sub">—</div>
       <div class="note" style="margin-top:8px">equity = cash + mark-to-market at live price</div>
+      <div class="note" id="engine-line" style="margin-top:4px">engine: checking…</div>
     </div>
-    <div class="hgrid" id="hero-books"></div>
   </div>
   <section>
     <div class="sec-head"><h2>Per-book stats</h2>
@@ -438,7 +451,7 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(
   <section>
     <div class="sec-head"><h2>Spot backtest</h2><span class="sec-note" id="bt-file"></span></div>
     <div class="panel">
-      <div class="stat-row" id="bt-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:13px;overflow:hidden;margin-bottom:13px"></div>
+      <div class="stat-row" id="bt-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:13px"></div>
       <canvas id="ch-bt"></canvas>
       <details><summary id="bt-per">per-symbol</summary><div class="tbl-scroll" style="margin-top:9px" id="bt-syms"></div></details>
       <details><summary>method &amp; diagnostics</summary><div style="margin-top:9px" id="bt-method"></div></details>
@@ -447,7 +460,7 @@ code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;color:var(
   <section>
     <div class="sec-head"><h2>Futures 3x backtest</h2><span class="sec-note" id="btf-file"></span></div>
     <div class="panel">
-      <div id="btf-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:13px;overflow:hidden;margin-bottom:13px"></div>
+      <div id="btf-stats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;margin-bottom:13px"></div>
       <div id="btf-rows"></div>
     </div>
   </section>
@@ -536,10 +549,12 @@ async function refreshPrices(){
 function setPill(ok, txt){
   const el=$("live-pill"); el.textContent="prices: "+txt;
   el.className="pill "+(ok==null?"":ok?"live-ok":"live-bad");
+  if(ok){ el.classList.remove("tick"); void el.offsetWidth; el.classList.add("tick"); }
 }
 setInterval(refreshPrices, 30000);
 setInterval(()=>{ if(live.at) $("price-age").textContent =
   "live prices: "+ago(new Date(live.at).toISOString())+" old"; }, 5000);
+setInterval(()=>{ try{ renderEngine(); }catch(e){} }, 30000);
 $("btn-px").addEventListener("click", refreshPrices);
 
 /* ---------- books / equity ---------- */
@@ -615,6 +630,44 @@ function renderBooks(){
 function liveBooks(){
   return Object.entries(SNAP.books).filter(([k])=>k!=="spot");
 }
+function daysLive(){
+  let t0=null;
+  for(const [k,b] of liveBooks()){
+    for(const p of b.open.concat(b.closed)){
+      const t=new Date(p.t||"").getTime();
+      if(t && (t0==null||t<t0)) t0=t;
+    }
+  }
+  if(t0==null) return null;
+  const d=(Date.now()-t0)/864e5;
+  return d<1 ? Math.max(1,Math.round(d*24))+"h" : d.toFixed(1)+"d";
+}
+function lastCycle(){
+  let t0=null;
+  for(const [k,b] of liveBooks()) for(const s of (b.snaps||[])){
+    const t=new Date(s[0]).getTime();
+    if(t && (t0==null||t>t0)) t0=t;
+  }
+  return t0;
+}
+function nextClose(){
+  const n=new Date();
+  return new Date(Date.UTC(n.getUTCFullYear(),n.getUTCMonth(),n.getUTCDate(),n.getUTCHours()-n.getUTCHours()%4+4,0,0));
+}
+function renderEngine(){
+  const el=$("engine-line"); if(!el) return;
+  const lc=lastCycle();
+  const ageH=lc?(Date.now()-lc)/36e5:null;
+  const ms=Math.max(0,nextClose()-Date.now());
+  const cd=Math.floor(ms/36e5)+"h"+String(Math.floor(ms%36e5/6e4)).padStart(2,"0")+"m";
+  let cls="eng-ok", txt;
+  if(ageH==null){ cls="eng-warn"; txt="no paper cycles recorded yet"; }
+  else if(ageH>24){ cls="eng-bad"; txt="engine quiet "+ago(new Date(lc).toISOString())+" — loop may be down, check run_live"; }
+  else if(ageH>6){ cls="eng-warn"; txt="last cycle "+ago(new Date(lc).toISOString())+" — behind schedule"; }
+  else { txt="last cycle "+ago(new Date(lc).toISOString()); }
+  el.className="note "+cls;
+  el.innerHTML="engine: <b>"+txt+"</b> · next 4H close in <b>"+cd+"</b>";
+}
 function renderHero(){
   const fwd = SNAP.books.fwd, fut = SNAP.books.fut;
   const e = bookEq(fwd), ef = fut ? bookEq(fut) : null;
@@ -625,17 +678,15 @@ function renderHero(){
   let risk=0;
   for(const p of fwd.open){ const cur=live.px[p.symbol];
     risk += Math.max(0,((cur||p.entry)-p.stop))*p.qty; }
+  const dl = daysLive();
   $("hero-sub").innerHTML =
     `<b class="${ret>=0?"pos":"neg"}">${pc(ret)}</b> since start · <b>${fwd.open.length}</b> open · `+
     `unrealized <b class="${e.un>=0?"pos":"neg"}">$${fm(e.un)}</b> · `+
     `realized <b class="${e.real>=0?"pos":"neg"}">$${fm(e.real)}</b> · `+
     `risk at stop <b>$${fm(risk)} (${e.eq?(100*risk/e.eq).toFixed(1):"0"}%)</b>`+
+    (dl?` · ${dl} live`:"")+
     (ef ? `<br><span class="muted">futures 3x book: <b>$${fm(ef.eq)}</b> (${pc((ef.eq/START-1)*100)}) · ${fut.open.length} open</span>` : "");
-  $("hero-books").innerHTML =
-    `<div class="hcell"><label>cash</label><b>$${fm(fwd.cash)}</b><i>forward</i></div>`+
-    `<div class="hcell"><label>closed</label><b>${fwd.closed.length}</b><i>realized $${fm(e.real)}</i></div>`+
-    `<div class="hcell"><label>win rate</label><b>${fwd.closed.length?Math.round(100*fwd.closed.filter(c=>c.pnl>0).length/fwd.closed.length)+"%":"—"}</b><i>forward</i></div>`+
-    `<div class="hcell"><label>deployed</label><b>${e.eq?Math.round(100*(e.eq-fwd.cash)/e.eq):0}%</b><i>of equity</i></div>`;
+  renderEngine();
 }
 
 function retStr(eq){ const v=(eq/START-1)*100; return (v>=0?"+":"")+v.toFixed(1)+"%"; }
@@ -658,15 +709,15 @@ function posCard(bk,b,p,eq){
   const prog = cur ? Math.max(0,Math.min(100,(cur-p.entry)/span*100)) : 0;
   let smark=0;
   if(p.tp!==p.entry) smark=Math.max(0,Math.min(100,(p.stop-p.entry)/(p.tp-p.entry)*100));
-  return `<div class="pos-card${cur?"":" stale"}">
+  return `<div class="pos-card ${cls}${cur?"":" stale"}">
     <div class="pos-top"><span class="pos-sym">${esc(p.symbol)}</span>
       <span class="chip ${b.kind==="fut"?"chip-fut":"chip-spot"}">${esc(b.label)}</span>
       ${p.lev?`<span class="chip">${esc(p.lev)}x</span>`:""}
       <span class="chip">${esc(ago(p.t))} old</span></div>
     <div class="pos-px ${cls}">${cur?"$"+fmg(cur):"entry $"+fmg(p.entry)}
-      <span class="pct">${cur?pc(u):"no live price"}</span></div>
-    <div class="track" title="progress entry → target"><span class="track-fill ${cls}" style="width:${prog.toFixed(0)}%"></span>
-      <span class="track-mark" style="left:${smark.toFixed(0)}%"></span></div>
+      <span class="pct">${cur?pc(u):"feed down — entry mark"}</span></div>
+    <div class="track" title="live price between stop tick and target tick"><span class="track-fill ${cls}" style="width:${prog.toFixed(0)}%"></span>
+      <span class="track-mark" style="left:${smark.toFixed(0)}%"></span><span class="track-end" style="left:100%"></span></div>
     <div class="kv-grid">
       <span class="kv">entry <b>${fmg(p.entry)}</b></span>
       <span class="kv">stop <b>${fmg(p.stop)}</b> <i class="neg">(${cur?pc(dst):"—"})</i></span>
@@ -677,6 +728,8 @@ function posCard(bk,b,p,eq){
       <span class="kv">uP&L <b class="${cls}">${up>=0?"+":""}$${fm(up)}</b></span>
       <span class="kv">risk <b>$${fm(p.risk)} (${eq?(100*p.risk/eq).toFixed(1):"0"}%)</b></span>
       ${p.liq?`<span class="kv">liq <b>${fmg(p.liq)}</b></span>`:""}
+      ${p.margin?`<span class="kv">margin <b>$${fm(p.margin)}</b></span>`:""}
+      ${(p.fund||0)!==0?`<span class="kv">funding <b class="${p.fund>0?"neg":"pos"}">${p.fund>0?"-":"+"}$${fm(Math.abs(p.fund))}</b></span>`:""}
       <span class="kv">score <b>${p.score}</b></span>
     </div></div>`;
 }
