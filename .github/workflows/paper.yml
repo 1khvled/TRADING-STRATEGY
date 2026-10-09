@@ -33,6 +33,8 @@ jobs:
     timeout-minutes: 25
     env:
       BINANCE_BASE_URL: https://data-api.binance.vision
+      BINANCE_API_KEY: ${{ secrets.BINANCE_API_KEY }}
+      BINANCE_API_SECRET: ${{ secrets.BINANCE_API_SECRET }}
       PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
